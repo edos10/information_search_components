@@ -1,2 +1,2 @@
-# information_search_components
+### Information Searchc Components
 Репозиторий по курсу Основы информационного поиска ПМИ ВШЭ
