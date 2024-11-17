@@ -3,8 +3,10 @@ package reverseindex
 import (
 	"errors"
 	"fmt"
+	boollogic "hw_3/bool_logic"
 	"hw_3/reverse_index/processing"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/RoaringBitmap/roaring"
@@ -86,38 +88,77 @@ func (i *InvertedIndex) AddDocument(text string, index int) error {
 	}
 
 	for _, word := range textForDocument {
-		bytesWord := []byte(word)
-		docs, contains, err := i.tree.Get(bytesWord)
-		if err != nil {
-			return fmt.Errorf("i.tree.Get: %w", err)
+		if len(word) <= 2 {
+			continue
 		}
+		runes := []rune(word)
+		prefStr := string(runes[0])
+		sufStr := string(runes[len(runes)-1])
 
-		bitmap := roaring.NewBitmap()
-		if contains {
-			err = bitmap.UnmarshalBinary(docs)
+		for ind, sym := range runes[1 : len(runes)-1] {
+			err := i.WriteWord(prefStr+"*", index)
 			if err != nil {
-				return fmt.Errorf("bitmap.UnmarshalBinary: %w", err)
+				return fmt.Errorf("i.WriteWord: %w", err)
 			}
+			prefStr += string(sym)
+
+			err = i.WriteWord("*"+sufStr, index)
+			if err != nil {
+				return fmt.Errorf("i.WriteWord: %w", err)
+			}
+			sufStr += string(runes[len(runes)-2-ind])
 		}
 
-		bitmap.Add(uint32(index))
-		docs, err = bitmap.MarshalBinary()
+		err := i.WriteWord(prefStr+"*", index)
 		if err != nil {
-			return fmt.Errorf("bitmap.MarshalBinary: %w", err)
+			return fmt.Errorf("i.WriteWord: %w", err)
 		}
 
-		err = i.tree.Put(bytesWord, docs)
+		err = i.WriteWord("*"+sufStr, index)
 		if err != nil {
-			return fmt.Errorf("i.tree.Put: %w", err)
+			return fmt.Errorf("i.WriteWord: %w", err)
+		}
+
+		err = i.WriteWord(word, index)
+		if err != nil {
+			return fmt.Errorf("i.WriteWord: %w", err)
 		}
 	}
+	return nil
+}
+
+func (i *InvertedIndex) WriteWord(word string, index int) error {
+	docs, contains, err := i.ReadSafe(word)
+	if err != nil {
+		return fmt.Errorf("i.ReadSafe: %w", err)
+	}
+
+	bitmap := roaring.NewBitmap()
+	if contains {
+		err = bitmap.UnmarshalBinary(docs)
+		if err != nil {
+			return fmt.Errorf("bitmap.UnmarshalBinary: %w", err)
+		}
+	}
+
+	bitmap.Add(uint32(index))
+	docs, err = bitmap.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("bitmap.MarshalBinary: %w", err)
+	}
+
+	err = i.WriteSafe([]byte(word), docs)
+	if err != nil {
+		return fmt.Errorf("i.WriteSafe: %w", err)
+	}
+
 	return nil
 }
 
 func (i *InvertedIndex) GetBitmapDocuments(word string) (*roaring.Bitmap, error) {
 	val, contains, err := i.ReadSafe(word)
 	if err != nil {
-		return nil, fmt.Errorf("i.tree.Get: %w", err)
+		return nil, fmt.Errorf("i.ReadSafe: %w", err)
 	}
 
 	bitmap := roaring.NewBitmap()
@@ -132,13 +173,75 @@ func (i *InvertedIndex) GetBitmapDocuments(word string) (*roaring.Bitmap, error)
 	return bitmap, nil
 }
 
-func (i *InvertedIndex) GetListDocuments(word string) ([]uint32, error) {
+// GetListDocumentsOnWord позволяет получить документы по слову, включая wildcard
+func (i *InvertedIndex) GetListDocumentsOnWord(word string) ([]uint32, error) {
+	var words []string
+
+	if strings.Contains(word, "*") {
+		words = strings.Split(word, "*")
+	}
+
+	if len(words) > 1 {
+		if words[0] != "" && words[1] != "" {
+			bitmapPrefix, err := i.GetBitmapDocuments(words[0] + "*")
+			if err != nil {
+				return []uint32{}, err
+			}
+
+			bitmapSuffix, err := i.GetBitmapDocuments("*" + words[1])
+			if err != nil {
+				return []uint32{}, err
+			}
+
+			bitmapPrefix.Intersects(bitmapSuffix)
+
+			return bitmapPrefix.ToArray(), nil
+		}
+		if words[0] == "" {
+			bitmapSuffix, err := i.GetBitmapDocuments("*" + words[1])
+			if err != nil {
+				return []uint32{}, err
+			}
+			return bitmapSuffix.ToArray(), nil
+		} else {
+			bitmap, err := i.GetBitmapDocuments(words[0] + "*")
+			if err != nil {
+				return []uint32{}, err
+			}
+			return bitmap.ToArray(), nil
+		}
+	}
 	bitmap, err := i.GetBitmapDocuments(word)
 	if err != nil {
 		return []uint32{}, err
 	}
-	uint32Array := bitmap.ToArray()
-	return uint32Array, nil
+
+	return bitmap.ToArray(), nil
+}
+
+func (i *InvertedIndex) GetListDocumentsOnBoolLogic(node *boollogic.Node) ([]uint32, error) {
+	var resBitmap *roaring.Bitmap
+
+	for _, word := range node.Words {
+		bitmap, err := i.GetBitmapDocuments(word)
+		if err != nil {
+			return []uint32{}, fmt.Errorf("i.GetBitmapDocuments: %w", err)
+		}
+
+		if resBitmap == nil {
+			resBitmap = bitmap
+		}
+
+		if node.Operation == boollogic.And {
+			resBitmap.And(bitmap)
+		} else if node.Operation == boollogic.Or {
+			resBitmap.Or(bitmap)
+		} else {
+			return []uint32{}, fmt.Errorf("wrong type of operation: %d", node.Operation)
+		}
+	}
+
+	return resBitmap.ToArray(), nil
 }
 
 func (i *InvertedIndex) WriteSafe(bytesWord, docs []byte) error {
