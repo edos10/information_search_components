@@ -3,7 +3,6 @@ package reverseindex
 import (
 	"errors"
 	"fmt"
-	boollogic "hw_3/bool_logic"
 	"hw_3/reverse_index/processing"
 	"os"
 	"strings"
@@ -62,7 +61,7 @@ func NewInvertedIndex(p *Params) (*InvertedIndex, error) {
 	}, nil
 }
 
-func (i *InvertedIndex) ProcessingText(text string) ([]string, error) {
+func (i *InvertedIndex) ProcessingText(text string, lang processing.Lang) ([]string, error) {
 	if i.processor == nil {
 		return []string{}, fmt.Errorf("processor is nil")
 	}
@@ -74,15 +73,15 @@ func (i *InvertedIndex) ProcessingText(text string) ([]string, error) {
 	case Stemming:
 		newText, err = i.processor.Stemming(text)
 	case Lemming:
-		newText, err = i.processor.Lemming(text)
+		newText, err = i.processor.Lemming(text, lang)
 	default:
 		err = errors.New("unknown type of normalizing")
 	}
 	return newText, err
 }
 
-func (i *InvertedIndex) AddDocument(text string, index int) error {
-	textForDocument, err := i.ProcessingText(text)
+func (i *InvertedIndex) AddDocument(text string, index int, lang processing.Lang) error {
+	textForDocument, err := i.ProcessingText(text, lang)
 	if err != nil {
 		return fmt.Errorf("i.ProcessingText: %w", err)
 	}
@@ -106,7 +105,7 @@ func (i *InvertedIndex) AddDocument(text string, index int) error {
 			if err != nil {
 				return fmt.Errorf("i.WriteWord: %w", err)
 			}
-			sufStr += string(runes[len(runes)-2-ind])
+			sufStr = string(runes[len(runes)-2-ind]) + sufStr
 		}
 
 		err := i.WriteWord(prefStr+"*", index)
@@ -173,8 +172,8 @@ func (i *InvertedIndex) GetBitmapDocuments(word string) (*roaring.Bitmap, error)
 	return bitmap, nil
 }
 
-// GetListDocumentsOnWord позволяет получить документы по слову, включая wildcard
-func (i *InvertedIndex) GetListDocumentsOnWord(word string) ([]uint32, error) {
+// GetBitmapsOnWord позволяет получить битмапу документов включая wildcard
+func (i *InvertedIndex) GetBitmapsOnWord(word string) (*roaring.Bitmap, error) {
 	var words []string
 
 	if strings.Contains(word, "*") {
@@ -185,63 +184,47 @@ func (i *InvertedIndex) GetListDocumentsOnWord(word string) ([]uint32, error) {
 		if words[0] != "" && words[1] != "" {
 			bitmapPrefix, err := i.GetBitmapDocuments(words[0] + "*")
 			if err != nil {
-				return []uint32{}, err
+				return nil, err
 			}
 
 			bitmapSuffix, err := i.GetBitmapDocuments("*" + words[1])
 			if err != nil {
-				return []uint32{}, err
+				return nil, err
 			}
 
 			bitmapPrefix.Intersects(bitmapSuffix)
 
-			return bitmapPrefix.ToArray(), nil
+			return bitmapPrefix, nil
 		}
 		if words[0] == "" {
 			bitmapSuffix, err := i.GetBitmapDocuments("*" + words[1])
 			if err != nil {
-				return []uint32{}, err
+				return nil, err
 			}
-			return bitmapSuffix.ToArray(), nil
+			return bitmapSuffix, nil
 		} else {
 			bitmap, err := i.GetBitmapDocuments(words[0] + "*")
 			if err != nil {
-				return []uint32{}, err
+				return nil, err
 			}
-			return bitmap.ToArray(), nil
+			return bitmap, nil
 		}
 	}
 	bitmap, err := i.GetBitmapDocuments(word)
 	if err != nil {
-		return []uint32{}, err
+		return nil, err
 	}
 
-	return bitmap.ToArray(), nil
+	return bitmap, nil
 }
 
-func (i *InvertedIndex) GetListDocumentsOnBoolLogic(node *boollogic.Node) ([]uint32, error) {
-	var resBitmap *roaring.Bitmap
-
-	for _, word := range node.Words {
-		bitmap, err := i.GetBitmapDocuments(word)
-		if err != nil {
-			return []uint32{}, fmt.Errorf("i.GetBitmapDocuments: %w", err)
-		}
-
-		if resBitmap == nil {
-			resBitmap = bitmap
-		}
-
-		if node.Operation == boollogic.And {
-			resBitmap.And(bitmap)
-		} else if node.Operation == boollogic.Or {
-			resBitmap.Or(bitmap)
-		} else {
-			return []uint32{}, fmt.Errorf("wrong type of operation: %d", node.Operation)
-		}
+// GetListDocumentsOnWord позволяет получить документы по слову, включая wildcard
+func (i *InvertedIndex) GetListDocumentsOnWord(word string) ([]uint32, error) {
+	bitmap, err := i.GetBitmapsOnWord(word)
+	if err != nil {
+		return nil, fmt.Errorf("i.GetBitmapsOnWord: %w", err)
 	}
-
-	return resBitmap.ToArray(), nil
+	return bitmap.ToArray(), nil
 }
 
 func (i *InvertedIndex) WriteSafe(bytesWord, docs []byte) error {

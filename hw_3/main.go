@@ -2,11 +2,17 @@ package main
 
 import (
 	"fmt"
-	"strings"
+	"log"
+
+	"github.com/aaaton/golem/v4"
+	"github.com/aaaton/golem/v4/dicts/ru"
 )
 
 func main() {
-	w := "card"
+	lemmatizer, err := golem.New(ru.New())
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	fmt.Println(strings.Split(w, "*"))
+	fmt.Println(lemmatizer.Lemma("Кошек"))
 }

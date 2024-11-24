@@ -6,13 +6,22 @@ import (
 
 	"github.com/aaaton/golem/v4"
 	"github.com/aaaton/golem/v4/dicts/en"
+	"github.com/aaaton/golem/v4/dicts/ru"
 	"github.com/kljensen/snowball"
 )
 
 const engLang = "english"
+const ruLand = "russian"
+
+type Lang uint8
+
+const (
+	RU Lang = iota
+	EN
+)
 
 type Processing interface {
-	Lemming(text string) ([]string, error)
+	Lemming(text string, lang Lang) ([]string, error)
 	Stemming(text string) ([]string, error)
 }
 
@@ -22,12 +31,24 @@ type MyProcessing struct {
 	StopWords map[string]bool
 }
 
-func (p *MyProcessing) Lemming(text string) ([]string, error) {
+func (p *MyProcessing) Lemming(text string, lang Lang) ([]string, error) {
 	words := strings.Fields(text)
 
-	lemmatizer, err := golem.New(en.New())
-	if err != nil {
-		return nil, fmt.Errorf("golem.New: %w", err)
+	var lemmatizer *golem.Lemmatizer
+
+	switch lang {
+	case RU:
+		lemmatizerRu, err := golem.New(ru.New())
+		if err != nil {
+			return nil, fmt.Errorf("golem.New: %w", err)
+		}
+		lemmatizer = lemmatizerRu
+	default:
+		lemmatizerEn, err := golem.New(en.New())
+		if err != nil {
+			return nil, fmt.Errorf("golem.New: %w", err)
+		}
+		lemmatizer = lemmatizerEn
 	}
 
 	lemmatizedWords := make([]string, len(words))
@@ -91,4 +112,25 @@ func (p *MyProcessing) DeleteStopWords(words ...string) {
 		value = strings.ToLower(value)
 		delete(p.StopWords, value)
 	}
+}
+
+func LemmingWord(word string, lang Lang) (string, error) {
+	var lemmatizer *golem.Lemmatizer
+
+	switch lang {
+	case RU:
+		lemmatizerRu, err := golem.New(ru.New())
+		if err != nil {
+			return "", fmt.Errorf("golem.New: %w", err)
+		}
+		lemmatizer = lemmatizerRu
+	default:
+		lemmatizerEn, err := golem.New(en.New())
+		if err != nil {
+			return "", fmt.Errorf("golem.New: %w", err)
+		}
+		lemmatizer = lemmatizerEn
+	}
+
+	return lemmatizer.Lemma(word), nil
 }
