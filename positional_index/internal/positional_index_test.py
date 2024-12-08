@@ -57,3 +57,14 @@ def test_add_many_documents_and_max_diff_two():
 
     res = index.search("один один шесть", Lang.RU)
     assert res == array("I", [1, 3])
+
+
+def test_add_many_documents_and_max_diff_two_with_stop_word_in_text():
+    index = PositionalIndex(max_diff_length=2, stop_words=["один"])
+    index.add_document("Один, один. Трое. шесть. Пять и шесть, семь и восемь, девять и десять.", lang=Lang.RU)
+    index.add_document("Три. Один. Четырех. Два, Пять и шесть, семь и восемь, девять и десять.", lang=Lang.RU)
+    index.add_document("Три. Один. Четырех. Один, Пять, шесть, четыре и два, пять и шесть.",lang=Lang.RU)
+
+
+    res = index.search("один один шесть", Lang.RU)
+    assert res == array("I", [1, 2, 3])
