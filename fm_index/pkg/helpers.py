@@ -57,9 +57,3 @@ class SymbolsCountTable:
         if char not in self.poses:
             return 0
         return bisect.bisect_right(self.poses[char], right_bound - 1)
-
-
-# t = SymbolsCountTable("tar ebttbxx tee")
-# print(t.count("t", 4))
-# print(bwt("text bebra text"))
-# print(lexicographic_count_symbols("fdffaaabb"))

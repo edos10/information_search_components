@@ -22,3 +22,33 @@ def test_on_zero_res():
     lst = list(index.search_query("aaa"))
     lst.sort(key=lambda i: i[0])
     assert lst == []
+
+def test_on_hard_search():
+    index = FMIndex("""
+    С точки зрения банальной эрудиции каждый индивидуум, критически
+    мотивирующий абстракцию, не может игнорировать текст из 100 слов,
+    концептуально интерпретируя общепринятые дефанизирующие поляризаторы,
+    поэтому консенсус, достигнутый диалектической материальной классификацией
+    всеобщих мотиваций в парадогматических связях предикатов, решает проблему
+    усовершенствования формирующих геотрансплантационных квазипузлистатов
+    всех кинетически кореллирующих аспектов. Эта проблема существует уже давно.
+    """)
+    lst = list(index.search_query("ааа"))
+    lst.sort(key=lambda i: i[0])
+    assert lst == []
+
+    lst = list(index.search_query("100"))
+    lst.sort(key=lambda i: i[0])
+    assert lst == [(129, 132)]
+
+    lst = list(index.search_query("ирующих"))
+    lst.sort(key=lambda i: i[0])
+    assert lst == [(396, 403), (470, 477)]
+
+    lst = list(index.search_query(" ирующих"))
+    lst.sort(key=lambda i: i[0])
+    assert lst == []
+
+    lst = list(index.search_query("проблем"))
+    lst.sort(key=lambda i: i[0])
+    assert lst == [(360, 367), (492, 499)]

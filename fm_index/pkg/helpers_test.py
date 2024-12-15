@@ -23,12 +23,12 @@ class TestHelpers(unittest.TestCase):
     def test_bwt(self):
         self.assertEqual(
             helpers.bwt("some string"),
-            "babba"
+            "emnroistg s"
         )
 
         self.assertEqual(
             helpers.bwt("aabbb"),
-            "",
+            "babba",
         )
 
     def test_lexicographic_cnt_less(self):
