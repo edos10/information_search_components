@@ -137,7 +137,7 @@ func Test_ReverseIndexWithWildcard(t *testing.T) {
 		newIndex.AddDocument("My new index is so nice", 0, processing.EN)
 		newIndex.AddDocument("delice", 1, processing.EN)
 
-		docs, err := newIndex.GetListDocumentsOnWord("*ec")
+		docs, err := newIndex.GetListDocumentsOnWord("*ce")
 		assert.Nil(t, err)
 		assert.Equal(t, []uint32{0, 1}, docs)
 	})

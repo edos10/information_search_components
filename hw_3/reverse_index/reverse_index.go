@@ -1,9 +1,9 @@
 package reverseindex
 
 import (
-	"errors"
 	"fmt"
 	"hw_3/reverse_index/processing"
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -22,10 +22,11 @@ const (
 const DefPath = "./reverse_index_data"
 
 type InvertedIndex struct {
-	tree      *lsm.LSMTree
-	processor processing.Processing
-	method    NormalizeType
-	mutex     *sync.Mutex
+	tree         *lsm.LSMTree
+	processor    processing.Processing
+	method       NormalizeType
+	mutex        *sync.Mutex
+	positionTree *lsm.LSMTree
 }
 
 type Params struct {
@@ -35,11 +36,7 @@ type Params struct {
 	Mutex     *sync.Mutex
 }
 
-func NewInvertedIndex(p *Params) (*InvertedIndex, error) {
-	if p.Directory == "" {
-		p.Directory = DefPath
-	}
-
+func MakeTree(p *Params) (*lsm.LSMTree, error) {
 	if _, err := os.Stat(p.Directory); os.IsNotExist(err) {
 		errMk := os.Mkdir(p.Directory, 0755)
 		if errMk != nil && !os.IsExist(errMk) {
@@ -51,6 +48,19 @@ func NewInvertedIndex(p *Params) (*InvertedIndex, error) {
 	tree, err := lsm.Open(p.Directory)
 	if err != nil {
 		return nil, fmt.Errorf("lsm.Open: %w", err)
+	}
+
+	return tree, nil
+}
+
+func NewInvertedIndex(p *Params) (*InvertedIndex, error) {
+	if p.Directory == "" {
+		p.Directory = DefPath
+	}
+
+	tree, err := MakeTree(p)
+	if err != nil {
+		return nil, fmt.Errorf("MakeTree: %w", err)
 	}
 
 	return &InvertedIndex{
@@ -75,7 +85,7 @@ func (i *InvertedIndex) ProcessingText(text string, lang processing.Lang) ([]str
 	case Lemming:
 		newText, err = i.processor.Lemming(text, lang)
 	default:
-		err = errors.New("unknown type of normalizing")
+		log.Println("processing method are not chose...")
 	}
 	return newText, err
 }
@@ -102,6 +112,7 @@ func (i *InvertedIndex) AddDocument(text string, index int, lang processing.Lang
 			prefStr += string(sym)
 
 			err = i.WriteWord("*"+sufStr, index)
+
 			if err != nil {
 				return fmt.Errorf("i.WriteWord: %w", err)
 			}
@@ -158,6 +169,24 @@ func (i *InvertedIndex) GetBitmapDocuments(word string) (*roaring.Bitmap, error)
 	val, contains, err := i.ReadSafe(word)
 	if err != nil {
 		return nil, fmt.Errorf("i.ReadSafe: %w", err)
+	}
+
+	bitmap := roaring.NewBitmap()
+	if !contains {
+		return bitmap, nil
+	}
+	err = bitmap.UnmarshalBinary(val)
+	if err != nil {
+		return nil, err
+	}
+
+	return bitmap, nil
+}
+
+func (i *InvertedIndex) GetBitmapDocumentsOnBytes(bytes []byte) (*roaring.Bitmap, error) {
+	val, contains, err := i.ReadSafeBytes(bytes)
+	if err != nil {
+		return nil, fmt.Errorf("i.ReadSafeBytes: %w", err)
 	}
 
 	bitmap := roaring.NewBitmap()
@@ -242,4 +271,39 @@ func (i *InvertedIndex) ReadSafe(word string) ([]byte, bool, error) {
 	defer i.mutex.Unlock()
 	val, contains, err := i.tree.Get([]byte(word))
 	return val, contains, err
+}
+
+func (i *InvertedIndex) ReadSafeBytes(word []byte) ([]byte, bool, error) {
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
+	val, contains, err := i.tree.Get(word)
+	return val, contains, err
+}
+
+func (i *InvertedIndex) WriteBytes(bytes []byte, index int) error {
+	docs, contains, err := i.ReadSafeBytes(bytes)
+	if err != nil {
+		return fmt.Errorf("i.ReadSafe: %w", err)
+	}
+
+	bitmap := roaring.NewBitmap()
+	if contains {
+		err = bitmap.UnmarshalBinary(docs)
+		if err != nil {
+			return fmt.Errorf("bitmap.UnmarshalBinary: %w", err)
+		}
+	}
+
+	bitmap.Add(uint32(index))
+	docs, err = bitmap.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("bitmap.MarshalBinary: %w", err)
+	}
+
+	err = i.WriteSafe(bytes, docs)
+	if err != nil {
+		return fmt.Errorf("i.WriteSafe: %w", err)
+	}
+
+	return nil
 }

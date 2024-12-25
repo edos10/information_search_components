@@ -9,6 +9,8 @@ import (
 	"github.com/RoaringBitmap/roaring"
 )
 
+const layoutParseTime = "2006-05-16 21:30:02"
+
 type Operation uint8
 
 const (
