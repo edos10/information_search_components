@@ -11,6 +11,9 @@ def suffix_array(s: SupportsIndex | Sized) -> list[int]:
     такой навиный алгоритм работает за n^2 + nlogn
     """
 
+    # это работает не очень эффективно за n^2logn
+    # для простоты реализовал так, но можно за nlog^2n
+
     return sorted(range(len(s)), key=lambda i: s[i:])
 
 

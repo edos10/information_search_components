@@ -52,3 +52,23 @@ def test_on_hard_search():
     lst = list(index.search_query("проблем"))
     lst.sort(key=lambda i: i[0])
     assert lst == [(360, 367), (492, 499)]
+
+    lst = list(index.search_query("точки "))
+    lst.sort(key=lambda i: i[0])
+    assert lst == [(7, 13)]
+
+
+def test_on_search_phrase():
+    index = FMIndex("""
+   Гостиная, в ней большие часы, справа дверь в спальню Софии, 
+   откудова слышно фортопияно с флейтою, которые потом умолкают. 
+   Лизонька среди комнаты спит, свесившись с кресел. 
+   Утро, чуть день брезжится.
+    """)
+
+    str_for_find = "гостиная, в "
+    start, end = index.search(str_for_find)
+    for i in index.generate_results(start, end, n=len(str_for_find)):
+        print(i)
+
+test_on_search_phrase()
